@@ -48,7 +48,8 @@
 
 <div class="cab"><canvas id="scr" width="256" height="144" aria-label="Игровое поле: гей-клуб, вид сверху"></canvas></div>
 
-<p class="keys"><b>WASD</b> / стрелки — бегать · <b>ПРОБЕЛ</b> / клик — схватить куклу рядом · <b>M</b> — звук</p>
+<p class="keys"><b>WASD</b> / стрелки — бегать · <b>ПРОБЕЛ</b> / клик — схватить куклу рядом · <b>M</b> — звук<br>
+  <b>Телефон:</b> держи палец и веди — джойстик · короткий тап — схватить · динамик в углу — звук</p>
 
 <script>
 (function(){
@@ -240,6 +241,7 @@
       }
     } else {
       var mx=(keys.d?1:0)-(keys.a?1:0), my=(keys.s?1:0)-(keys.w?1:0);
+      if(joy&&(joy.dx||joy.dy)){ mx=joy.dx; my=joy.dy; }
       if(mx||my){ var L=Math.hypot(mx,my); P.f=Math.atan2(my,mx); move(P,mx/L*64*dt,my/L*64*dt); }
     }
     while(dolls.length<7 && spawnDoll());
@@ -320,10 +322,23 @@
     var s=Math.ceil(timeLeft), ts=Math.floor(s/60)+':'+(s%60<10?'0':'')+(s%60);
     font(12); txt(ts,Math.round((W-g.measureText(ts).width)/2),8,(timeLeft<10&&Math.floor(t*4)%2)?C.red:C.white,12);
   }
+  function speaker(){
+    var x=W-18,y=9;
+    px(x,y+3,3,5,C.white); px(x+3,y+1,2,9,C.white); px(x+5,y,1,11,C.white);
+    if(muted){ for(var i=0;i<5;i++) px(x+8+i,y+2+i,2,2,C.red); for(i=0;i<5;i++) px(x+12-i,y+2+i,2,2,C.red); }
+    else { px(x+8,y+3,1,5,C.cyan); px(x+10,y+1,1,9,C.cyan); }
+  }
+  function stick(){
+    if(!joy) return;
+    g.globalAlpha=.5;
+    for(var a=0;a<6.28;a+=.22) px(joy.ox+Math.cos(a)*JMAX-1,joy.oy+Math.sin(a)*JMAX-1,2,2,C.dim);
+    disc(Math.round(joy.ox+joy.dx*JMAX),Math.round(joy.oy+joy.dy*JMAX),5,C.hot);
+    g.globalAlpha=1;
+  }
   function panel(){ g.fillStyle='rgba(11,8,18,0.8)'; g.fillRect(0,0,W,H); }
   function draw(){
     cam.x=Math.max(0,Math.min(MW-W,Math.round(P.x-W/2))); cam.y=Math.max(0,Math.min(MH-H,Math.round(P.y-H/2)));
-    world(); hud();
+    world(); hud(); speaker(); stick();
     if(state==='menu'){
       panel();
       ctext('КУКЛЫ РАЗБЕГАЮТСЯ — ДОГОНЯЙ',30,C.white,11);
@@ -360,7 +375,25 @@
   });
   addEventListener('keyup',function(e){ var m=KMAP[e.key.toLowerCase()]; if(m) keys[m]=false; });
   addEventListener('blur',function(){ keys={}; });
-  cv.addEventListener('pointerdown',function(e){ e.preventDefault(); grab(); });
+  var joy=null, JMAX=22, JDEAD=4;
+  function cpos(e){ var r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; }
+  cv.addEventListener('pointerdown',function(e){
+    e.preventDefault();
+    var p=cpos(e);
+    if(p.x>W-22&&p.y<24){ muted=!muted; if(master) master.gain.value=muted?0:1; if(!muted) audio(); return; }
+    if(e.pointerType!=='mouse'){ try{ cv.setPointerCapture(e.pointerId); }catch(err){} joy={id:e.pointerId,ox:p.x,oy:p.y,dx:0,dy:0}; }
+    grab();
+  });
+  cv.addEventListener('pointermove',function(e){
+    if(!joy||e.pointerId!==joy.id) return;
+    e.preventDefault();
+    var p=cpos(e), dx=p.x-joy.ox, dy=p.y-joy.oy, d=Math.hypot(dx,dy);
+    if(d>JDEAD){ var L=Math.min(d,JMAX)/JMAX; joy.dx=dx/d*L; joy.dy=dy/d*L; }
+    else { joy.dx=joy.dy=0; }
+  });
+  function endJoy(e){ if(joy&&e.pointerId===joy.id) joy=null; }
+  cv.addEventListener('pointerup',endJoy);
+  cv.addEventListener('pointercancel',endJoy);
   cv.addEventListener('contextmenu',function(e){ e.preventDefault(); });
 
   [[170,150],[330,140],[210,205],[300,210],[256,120]].forEach(function(p,i){ dolls.push({x:p[0],y:p[1],k:1,ph:i,a:0,j:0,fear:0,cd:0,dash:0,hair:HAIR[i%4]}); });
